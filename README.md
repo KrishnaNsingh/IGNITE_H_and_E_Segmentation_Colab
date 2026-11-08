@@ -5,7 +5,10 @@
 ![PyTorch](https://img.shields.io/badge/PyTorch-segmentation-EE4C2C?logo=pytorch&logoColor=white)
 ![License](https://img.shields.io/badge/dataset%20license-CC%20BY--NC--SA%204.0-blue)
 
-This repository contains a Google Colab notebook for a **supervised U-Net baseline** for the IGNITE v2 H&E tissue-compartment segmentation task. It prepares the dataset, creates a patient-aware validation split, trains a U-Net with an ImageNet-pretrained ResNet34 encoder, evaluates class-wise Dice/IoU, and saves checkpoints and plots to Google Drive.
+This repository contains Google Colab notebooks for supervised and semi-supervised **U-Net
+segmentation** of IGNITE v2 H&E tissue compartments. The baseline prepares the dataset,
+creates a patient-aware validation split, trains a U-Net with an ImageNet-pretrained ResNet34
+encoder, evaluates class-wise Dice/IoU, and saves checkpoints and plots to Google Drive.
 
 > This is a practical baseline for experimentation. It is not an exact reproduction of the official pathology-adapted nnU-Net training or inference pipeline.
 
@@ -15,6 +18,7 @@ This repository contains a Google Colab notebook for a **supervised U-Net baseli
 - [Repository structure](#repository-structure)
 - [Dataset](#dataset)
 - [Model and training](#model-and-training)
+- [Mean Teacher semi-supervised training](#mean-teacher-semi-supervised-training)
 - [Quick start](#quick-start)
 - [Outputs](#outputs)
 - [Important evaluation notes](#important-evaluation-notes)
@@ -57,6 +61,9 @@ flowchart LR
 ```text
 .
 ├── IGNITE_H_and_E_Segmentation_Colab.ipynb  # End-to-end Colab notebook
+├── IGNITE_H_and_E_Mean_Teacher_Colab.ipynb  # Earlier Mean Teacher experiment
+├── IGNITE_H_and_E_Mean_Teacher_Colab_final.ipynb
+│                                             # Finalized semi-supervised notebook
 ├── data_overview.csv                        # Image, task, patient, and split metadata
 ├── he_label_map.json                        # H&E class ID to class-name mapping
 ├── annotations.zip                          # Compressed annotation masks
@@ -118,6 +125,31 @@ The complete mapping is available in [`he_label_map.json`](./he_label_map.json).
 
 The notebook uses `segmentation-models-pytorch`, PyTorch, NumPy, pandas, Pillow, scikit-learn, matplotlib, and tqdm. It installs or upgrades `segmentation-models-pytorch` inside Colab.
 
+## Mean Teacher semi-supervised training
+
+[`IGNITE_H_and_E_Mean_Teacher_Colab_final.ipynb`](./IGNITE_H_and_E_Mean_Teacher_Colab_final.ipynb)
+extends the baseline for experiments with limited annotations:
+
+- Reuses the patient-grouped 20% validation split from the supervised workflow.
+- Uses a reproducible 20% labelled / 80% unlabelled split of training patients.
+- Trains a student U-Net and an exponential-moving-average (EMA) teacher U-Net.
+- Applies supervised cross-entropy to labelled masks and confidence-filtered consistency loss
+  to unlabelled images.
+- Evaluates and saves the teacher model; validation masks and the official test split remain
+  isolated from training.
+
+The default Mean Teacher configuration uses `PATCH_SIZE = 512`, `BATCH_SIZE = 2`,
+`EMA_DECAY = 0.99`, `CONFIDENCE_THRESHOLD = 0.70`, and a five-epoch consistency-loss
+ramp-up. Its outputs are stored in:
+
+```text
+MyDrive/IGNITE/training_outputs/ignite_he_mean_teacher_20pct/
+```
+
+For a fair comparison, train a supervised control with the same labelled patient IDs,
+validation split, crop settings, and random seeds. Do not compare the Mean Teacher result
+only with the full-supervision baseline, because that baseline uses more labelled data.
+
 ## Quick start
 
 ### 1. Prepare the data
@@ -170,6 +202,24 @@ To resume after a Colab disconnect:
 3. Set `RESUME_TRAINING = True`.
 4. Rerun the setup and training cells.
 
+### 5. Run the Mean Teacher experiment (optional)
+
+Open [`IGNITE_H_and_E_Mean_Teacher_Colab_final.ipynb`](./IGNITE_H_and_E_Mean_Teacher_Colab_final.ipynb)
+in Google Colab after extracting the H&E folders in Google Drive:
+
+```text
+MyDrive/IGNITE/
+├── images/he/
+├── annotations/he/
+├── data_overview.csv
+└── he_label_map.json
+```
+
+The Mean Teacher notebook reads the extracted folders directly rather than ZIP archives.
+Run its cells from top to bottom, keep `RESUME_TRAINING = False` for a new experiment, and
+set it to `True` after a disconnect when resuming from `last_checkpoint.pth`. Change
+`LABELED_FRACTION` only when defining a new label-budget experiment.
+
 ## Outputs
 
 By default, outputs are stored in:
@@ -207,9 +257,10 @@ Suggested extensions after reproducing the baseline:
 
 1. Compare 10%, 25%, 50%, and 100% labelled-patient training sets.
 2. Keep the validation patients and metrics fixed across experiments.
-3. Add a Mean Teacher or FixMatch-style semi-supervised objective.
-4. Compare against the official nnU-Net inference and evaluation workflow.
-5. Report per-class performance, patient overlap, and the exact split configuration.
+3. Repeat Mean Teacher experiments with 10%, 25%, and 50% labelled patients.
+4. Add a FixMatch-style semi-supervised objective.
+5. Compare against the official nnU-Net inference and evaluation workflow.
+6. Report per-class performance, patient overlap, and the exact split configuration.
 
 ## References and citation
 
